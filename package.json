@@ -1,0 +1,1 @@
+{"name":"samurai-zero","version":"1.0.0","scripts":{"start":"node server.js"},"dependencies":{"socket.io":"^4.8.1","socket.io-client":"4.8.1"},"engines":{"node":">=20"}}
