@@ -1,1 +1,960 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no"><title>Samurai Zero</title><style>*{box-sizing:border-box}body{margin:0;background:#090b19;color:#e9faff;font:16px monospace;text-align:center}h1{color:#66faff;text-shadow:3px 3px #e53585}input,select,button{background:#17243a;color:white;border:1px solid #48e4f4;padding:12px;border-radius:6px;font:inherit;margin:5px}button{cursor:pointer}#lobby{max-width:520px;margin:8vh auto;padding:20px}canvas{width:100%;height:100%;object-fit:contain;display:block}#game{position:fixed;inset:0;display:none}#hud{position:absolute;top:8px;left:0;right:0;pointer-events:none;font-weight:bold;text-shadow:1px 2px black}#controls{position:absolute;bottom:15px;left:12px;right:12px;display:flex;justify-content:space-between;touch-action:none}#pad{width:115px;height:115px;border:2px solid #58c9df;border-radius:50%;background:#19354a88;touch-action:none}#actions{display:flex;align-items:end}#actions button{touch-action:none;padding:15px}#waiting{position:absolute;top:35%;left:0;right:0}small{color:#a6b8d1}@media(max-width:600px){#lobby{margin:2vh auto}#actions button{padding:10px;margin:2px;font-size:12px}#pad{width:95px;height:95px}#hud{font-size:12px}#status{font-size:16px}}#waiting{background:#090b19dd;padding:16px}#controls{pointer-events:none}#pad,#actions{pointer-events:auto}</style></head><body><section id="lobby"><h1>SAMURAI ZERO</h1><h2>PIXEL CLASH // 5v5</h2><p>Enter the neon battlefield.</p><input id="name" aria-label="Player name" maxlength="18" placeholder="Player name" value="RONIN"><br><input id="code" aria-label="Room code" maxlength="12" placeholder="Room code (blank to create)"><br><select id="team" aria-label="Team"><option value="0">Crimson</option><option value="1">Azure</option></select><select id="cls" aria-label="Character"><option value="0">Shadow Ronin</option><option value="1">Cyber Guardian</option><option value="2">Neon Tech-Ninja</option></select><br><button id="join">ENTER ROOM</button><p id="msg"></p><small>WASD / arrows · J attack · Space dash · K skill<br>Mobile: joystick + action buttons</small></section><section id="game"><canvas id="cv" width="1600" height="1000"></canvas><div id="hud"></div><div id="waiting"><h2 id="status"></h2><button id="share">COPY INVITE LINK</button><button id="start">START MATCH</button></div><div id="controls"><div id="pad"></div><div id="actions"><button data-act="d">DASH</button><button data-act="s">SKILL</button><button data-act="a">SLASH</button></div></div></section><script src="/socket.io/socket.io.js"></script><script>const $=id=>document.getElementById(id),socket=io(),ctx=$('cv').getContext('2d');let id,room,state,keys={},touch={x:0,y:0},act={};$('code').value=new URLSearchParams(location.search).get('room')||'';$('join').onclick=()=>socket.emit('join',{name:$('name').value,code:$('code').value,team:$('team').value,cls:$('cls').value});socket.on('disconnect',()=>{$('lobby').style.display='block';$('game').style.display='none';$('code').value=room||$('code').value;id=null;state=null;$('msg').textContent='Connection lost. Reconnecting…'});socket.on('connect',()=>{$('msg').textContent='Connected — enter your room'});socket.on('connect_error',()=>{$('msg').textContent='Connecting to server… Please wait or retry.'});socket.on('errorMsg',m=>$('msg').textContent=m);socket.on('joined',d=>{id=d.id;room=d.code;history.replaceState(null,'','/?room='+room);$('lobby').style.display='none';$('game').style.display='block'});$('share').onclick=async()=>{let u=location.origin+'/?room='+room;try{await navigator.clipboard.writeText(u);$('share').textContent='COPIED!'}catch{prompt('Invite link',u)}};$('start').onclick=()=>socket.emit('start');socket.on('state',s=>{state=s;$('waiting').style.display=s.active?'none':'block';$('start').style.display=s.host===id?'inline-block':'none';$('status').textContent=s.time===0?'MATCH OVER — '+(s.score[0]===s.score[1]?'DRAW':s.score[0]>s.score[1]?'CRIMSON WINS':'AZURE WINS'):'ROOM '+s.code+' | '+s.p.filter(p=>!p.bot).length+' players — '+s.p.filter(p=>!p.bot).map(p=>p.name+' ('+(p.t?'Azure':'Crimson')+')').join(', ');$('hud').textContent='CRIMSON '+Math.floor(s.score[0])+'  |  '+Math.ceil(s.time)+'s  |  '+Math.floor(s.score[1])+' AZURE · '+(s.p.find(p=>p.id===id)?.dead?'RESPAWNING':'HP '+(s.p.find(p=>p.id===id)?.hp??100));});onkeydown=e=>{keys[e.code]=true;if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code))e.preventDefault()};onkeyup=e=>keys[e.code]=false;onblur=()=>{keys={};act={};touch={x:0,y:0}};let pad=$('pad');function move(e){let r=pad.getBoundingClientRect();touch={x:e.clientX-r.left-r.width/2,y:e.clientY-r.top-r.height/2}}pad.onpointerdown=e=>{pad.setPointerCapture(e.pointerId);move(e)};pad.onpointermove=e=>{if(pad.hasPointerCapture(e.pointerId))move(e)};pad.onpointerup=pad.onpointercancel=()=>touch={x:0,y:0};document.querySelectorAll('[data-act]').forEach(b=>{b.onpointerdown=e=>{b.setPointerCapture(e.pointerId);act[b.dataset.act]=true};b.onpointerup=b.onpointercancel=()=>act[b.dataset.act]=false});setInterval(()=>{if(id)socket.emit('input',{x:touch.x+(keys.KeyD||keys.ArrowRight?1:0)-(keys.KeyA||keys.ArrowLeft?1:0),y:touch.y+(keys.KeyS||keys.ArrowDown?1:0)-(keys.KeyW||keys.ArrowUp?1:0),a:!!(act.a||keys.KeyJ),d:!!(act.d||keys.Space),s:!!(act.s||keys.KeyK)})},50);function draw(){requestAnimationFrame(draw);if(!state)return;ctx.fillStyle='#10162a';ctx.fillRect(0,0,1600,1000);ctx.strokeStyle='#20344a';for(let x=0;x<1600;x+=50){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,1000);ctx.stroke()}for(let y=0;y<1000;y+=50){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(1600,y);ctx.stroke()}ctx.strokeStyle='#f8d66d';ctx.lineWidth=4;ctx.beginPath();ctx.arc(800,500,95,0,Math.PI*2);ctx.stroke();ctx.fillStyle='#f8d66d';ctx.fillRect(785,485,30,30);for(let p of state.p){if(p.dead)continue;let c=p.t?'#39d9ff':'#ff467b';ctx.fillStyle=c;ctx.fillRect(p.x-17,p.y-20,34,40);ctx.fillStyle='#0b1020';ctx.fillRect(p.x-12,p.y-12,24,8);ctx.fillStyle='#fff';ctx.fillRect(p.x-9,p.y-10,5,3);ctx.fillRect(p.x+4,p.y-10,5,3);ctx.fillStyle=c;ctx.fillRect(p.x-23,p.y-32,46*p.hp/100,5);ctx.font='17px monospace';ctx.textAlign='center';ctx.fillStyle='#fff';ctx.fillText(p.name,p.x,p.y-39);if(p.id===id){ctx.strokeStyle='white';ctx.strokeRect(p.x-23,p.y-24,46,48)}if(Date.now()-p.flash<180){ctx.strokeStyle=c;ctx.beginPath();ctx.arc(p.x,p.y,70,0,Math.PI*2);ctx.stroke()}}}draw();</script></body></html>
+<!DOCTYPE html>
+<html lang="ar" dir="ltr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>SAMURAI ZERO: PIXEL CLASH — 5v5 Cyber-Samurai PvPvE</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-touch-callout: none;
+      margin: 0;
+      padding: 0;
+    }
+
+    :root {
+      --bg-dark: #070911;
+      --panel-bg: rgba(12, 16, 28, 0.94);
+      --panel-solid: rgba(9, 13, 24, 0.98);
+      --panel-border: rgba(255, 255, 255, 0.16);
+      --crimson: #ff2e55;
+      --crimson-glow: rgba(255, 46, 85, 0.35);
+      --azure: #00d9ff;
+      --azure-glow: rgba(0, 217, 255, 0.35);
+      --gold: #ffd166;
+      --emerald: #2ee59d;
+      --text-main: #f5f7ff;
+      --text-muted: #a6b1d0;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      background: var(--bg-dark);
+      color: var(--text-main);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      overflow: hidden;
+      touch-action: none;
+    }
+
+    #game-root {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      background: radial-gradient(circle at 50% 40%, #131b33 0%, #070911 78%);
+    }
+
+    canvas#gameCanvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+    }
+
+    /* ================= LOBBY / CHARACTER SELECT ================= */
+    #lobby-screen {
+      position: absolute;
+      inset: 0;
+      z-index: 30;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 14px 18px;
+      background:
+        linear-gradient(180deg, rgba(7, 9, 17, 0.9) 0%, rgba(10, 14, 26, 0.82) 50%, rgba(7, 9, 17, 0.95) 100%);
+      backdrop-filter: blur(6px);
+      overflow-y: auto;
+    }
+
+    #lobby-screen.hidden {
+      display: none;
+    }
+
+    .lobby-header {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      border-bottom: 1px solid var(--panel-border);
+      padding-bottom: 10px;
+    }
+
+    .brand-block {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand-badge {
+      background: linear-gradient(135deg, var(--crimson), #ff7b00);
+      color: #fff;
+      font-weight: 900;
+      font-size: 11px;
+      padding: 4px 8px;
+      border-radius: 4px;
+      letter-spacing: 1px;
+    }
+
+    .brand-title {
+      font-size: clamp(18px, 3vw, 28px);
+      font-weight: 900;
+      letter-spacing: 2px;
+      text-shadow: 0 0 18px rgba(0, 217, 255, 0.35);
+    }
+
+    .brand-title span {
+      color: var(--azure);
+    }
+
+    .player-name-box {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--panel-bg);
+      border: 1px solid var(--panel-border);
+      padding: 6px 10px;
+      border-radius: 6px;
+    }
+
+    .player-name-box label {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .player-name-box input {
+      background: transparent;
+      border: none;
+      outline: none;
+      color: var(--gold);
+      font-family: inherit;
+      font-weight: 700;
+      font-size: 13px;
+      width: 120px;
+    }
+
+    .lobby-main {
+      display: grid;
+      grid-template-columns: 1fr 1.6fr 1fr;
+      gap: 14px;
+      margin: 12px 0;
+      align-items: stretch;
+    }
+
+    @media (max-width: 960px) {
+      .lobby-main {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .team-panel {
+      background: var(--panel-bg);
+      border: 1px solid var(--panel-border);
+      border-radius: 10px;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .team-panel.crimson.active-team {
+      border-color: var(--crimson);
+      box-shadow: 0 0 22px var(--crimson-glow);
+    }
+
+    .team-panel.azure.active-team {
+      border-color: var(--azure);
+      box-shadow: 0 0 22px var(--azure-glow);
+    }
+
+    .team-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+    }
+
+    .team-btn {
+      flex: 1;
+      padding: 8px 10px;
+      border-radius: 6px;
+      border: 1px solid transparent;
+      font-family: inherit;
+      font-weight: 800;
+      font-size: 13px;
+      cursor: pointer;
+      letter-spacing: 1px;
+      transition: transform 0.12s ease, opacity 0.12s ease;
+    }
+
+    .team-btn:active {
+      transform: scale(0.97);
+    }
+
+    .team-btn.crimson {
+      background: rgba(255, 46, 85, 0.18);
+      color: #ff758f;
+      border-color: rgba(255, 46, 85, 0.45);
+    }
+
+    .team-btn.crimson.selected {
+      background: var(--crimson);
+      color: #fff;
+    }
+
+    .team-btn.azure {
+      background: rgba(0, 217, 255, 0.16);
+      color: #7ae7ff;
+      border-color: rgba(0, 217, 255, 0.45);
+    }
+
+    .team-btn.azure.selected {
+      background: var(--azure);
+      color: #051018;
+    }
+
+    .bot-controls {
+      display: flex;
+      gap: 6px;
+    }
+
+    .mini-btn {
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--text-main);
+      border: 1px solid var(--panel-border);
+      border-radius: 5px;
+      padding: 5px 9px;
+      font-family: inherit;
+      font-size: 11px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .mini-btn:hover {
+      background: rgba(255, 255, 255, 0.16);
+    }
+
+    .roster-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      min-height: 150px;
+    }
+
+    .roster-slot {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 6px 8px;
+      border-radius: 6px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.07);
+      font-size: 12px;
+    }
+
+    .roster-slot.is-you {
+      border-color: var(--gold);
+      background: rgba(255, 209, 102, 0.12);
+    }
+
+    .roster-slot.empty {
+      color: var(--text-muted);
+      border-style: dashed;
+      opacity: 0.65;
+    }
+
+    .char-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+    }
+
+    @media (max-width: 680px) {
+      .char-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .char-card {
+      background: var(--panel-bg);
+      border: 1px solid var(--panel-border);
+      border-radius: 10px;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      gap: 8px;
+      cursor: pointer;
+      transition: transform 0.14s ease, border-color 0.14s ease, box-shadow 0.14s ease;
+    }
+
+    .char-card:hover {
+      transform: translateY(-2px);
+    }
+
+    .char-card.selected {
+      border-color: var(--gold);
+      box-shadow: 0 0 20px rgba(255, 209, 102, 0.28);
+      background: rgba(24, 32, 54, 0.96);
+    }
+
+    .char-preview-canvas {
+      width: 72px;
+      height: 72px;
+      image-rendering: pixelated;
+      background: rgba(0, 0, 0, 0.35);
+      border-radius: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .char-name {
+      font-size: 13px;
+      font-weight: 900;
+      letter-spacing: 0.8px;
+    }
+
+    .char-role {
+      font-size: 10px;
+      color: var(--gold);
+      text-transform: uppercase;
+    }
+
+    .char-desc {
+      font-size: 11px;
+      color: var(--text-muted);
+      line-height: 1.35;
+    }
+
+    .ability-pills {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      text-align: left;
+      font-size: 10px;
+      margin-top: auto;
+    }
+
+    .ability-pill {
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 4px;
+      padding: 4px 6px;
+      color: #dbe3ff;
+    }
+
+    .ability-pill b {
+      color: var(--azure);
+    }
+
+    .lobby-footer {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      background: var(--panel-bg);
+      border: 1px solid var(--panel-border);
+      border-radius: 10px;
+      padding: 10px 14px;
+    }
+
+    .map-legend-brief {
+      font-size: 11px;
+      color: var(--text-muted);
+      line-height: 1.45;
+      max-width: 620px;
+    }
+
+    .enter-btn {
+      background: linear-gradient(135deg, #2ee59d, #00b894);
+      color: #04130d;
+      border: none;
+      border-radius: 8px;
+      padding: 11px 22px;
+      font-family: inherit;
+      font-size: 14px;
+      font-weight: 900;
+      letter-spacing: 1.4px;
+      cursor: pointer;
+      box-shadow: 0 0 24px rgba(46, 229, 157, 0.35);
+    }
+
+    .enter-btn:active {
+      transform: scale(0.98);
+    }
+
+    /* ================= IN-GAME HUD ================= */
+    #hud-layer {
+      position: absolute;
+      inset: 0;
+      z-index: 15;
+      pointer-events: none;
+      display: none;
+    }
+
+    #hud-layer.active {
+      display: block;
+    }
+
+    .top-bar {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      right: 10px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .score-pill {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: var(--panel-solid);
+      border: 1px solid var(--panel-border);
+      border-radius: 8px;
+      padding: 7px 12px;
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .score-crimson { color: #ff6b88; }
+    .score-azure { color: #5ce1ff; }
+    .score-timer { color: var(--gold); }
+
+    .hud-actions {
+      display: flex;
+      gap: 6px;
+      pointer-events: auto;
+    }
+
+    .hud-btn {
+      background: var(--panel-solid);
+      color: var(--text-main);
+      border: 1px solid var(--panel-border);
+      border-radius: 6px;
+      padding: 6px 10px;
+      font-family: inherit;
+      font-size: 11px;
+      font-weight: 800;
+      cursor: pointer;
+    }
+
+    .hud-btn:active {
+      transform: scale(0.96);
+    }
+
+    .event-banner {
+      position: absolute;
+      top: 52px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--panel-solid);
+      border: 1px solid var(--gold);
+      color: var(--gold);
+      padding: 5px 14px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+      max-width: 92vw;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      box-shadow: 0 0 18px rgba(255, 209, 102, 0.22);
+    }
+
+    .player-status-box {
+      position: absolute;
+      bottom: 14px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--panel-solid);
+      border: 1px solid var(--panel-border);
+      border-radius: 10px;
+      padding: 8px 14px;
+      min-width: 260px;
+      max-width: 92vw;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .level-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 11px;
+      font-weight: 800;
+    }
+
+    .level-badge {
+      color: var(--gold);
+    }
+
+    .xp-text {
+      color: var(--emerald);
+      font-size: 10px;
+    }
+
+    .bar-outer {
+      width: 100%;
+      height: 9px;
+      background: rgba(255, 255, 255, 0.12);
+      border-radius: 999px;
+      overflow: hidden;
+    }
+
+    .hp-bar-inner {
+      height: 100%;
+      width: 100%;
+      background: linear-gradient(90deg, #2ee59d, #00d9ff);
+      transition: width 0.1s linear;
+    }
+
+    .xp-bar-outer {
+      width: 100%;
+      height: 5px;
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 999px;
+      overflow: hidden;
+    }
+
+    .xp-bar-inner {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #ffd166, #ff9f1c);
+      transition: width 0.12s linear;
+    }
+
+    .status-meta {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      font-size: 10px;
+      color: var(--text-muted);
+    }
+
+    #minimap-canvas {
+      position: absolute;
+      top: 86px;
+      right: 10px;
+      width: 162px;
+      height: 110px;
+      border-radius: 8px;
+      border: 1px solid var(--panel-border);
+      background: rgba(7, 10, 19, 0.92);
+      image-rendering: pixelated;
+    }
+
+    @media (max-width: 640px) {
+      .event-banner {
+        top: 84px;
+        font-size: 10px;
+        padding: 4px 10px;
+      }
+      #minimap-canvas {
+        width: 120px;
+        height: 82px;
+        top: 114px;
+      }
+      .player-status-box {
+        bottom: auto;
+        top: 114px;
+        left: 10px;
+        transform: none;
+        min-width: 186px;
+        padding: 7px 10px;
+      }
+    }
+
+    /* ================= MAP & MECHANICS GUIDE MODAL ================= */
+    #map-guide-modal {
+      position: absolute;
+      inset: 0;
+      z-index: 35;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      background: rgba(4, 6, 12, 0.88);
+      backdrop-filter: blur(5px);
+      pointer-events: auto;
+    }
+
+    #map-guide-modal.active {
+      display: flex;
+    }
+
+    .guide-card {
+      width: 100%;
+      max-width: 680px;
+      max-height: 86vh;
+      overflow-y: auto;
+      background: var(--panel-solid);
+      border: 1px solid rgba(255, 209, 102, 0.45);
+      border-radius: 12px;
+      padding: 18px 20px;
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.75);
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .guide-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      border-bottom: 1px solid var(--panel-border);
+      padding-bottom: 10px;
+    }
+
+    .guide-title {
+      font-size: 15px;
+      font-weight: 900;
+      color: var(--gold);
+      letter-spacing: 0.8px;
+    }
+
+    .guide-list {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+    }
+
+    @media (max-width: 600px) {
+      .guide-list {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .guide-item {
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.09);
+      border-radius: 8px;
+      padding: 10px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .guide-item-title {
+      font-size: 11px;
+      font-weight: 900;
+      color: var(--azure);
+      letter-spacing: 0.5px;
+    }
+
+    .guide-item-desc {
+      font-size: 11px;
+      line-height: 1.45;
+      color: var(--text-main);
+    }
+
+    /* ================= TOUCH CONTROLS ================= */
+    #touch-controls {
+      position: absolute;
+      inset: 0;
+      z-index: 20;
+      pointer-events: none;
+      display: none;
+    }
+
+    #touch-controls.active {
+      display: block;
+    }
+
+    #joystick-zone {
+      position: absolute;
+      bottom: 24px;
+      left: 24px;
+      width: 124px;
+      height: 124px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.07);
+      border: 1px solid rgba(255, 255, 255, 0.22);
+      pointer-events: auto;
+      touch-action: none;
+    }
+
+    #joystick-knob {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 48px;
+      height: 48px;
+      margin-left: -24px;
+      margin-top: -24px;
+      border-radius: 50%;
+      background: rgba(0, 217, 255, 0.45);
+      border: 2px solid var(--azure);
+      pointer-events: none;
+    }
+
+    .action-pad {
+      position: absolute;
+      bottom: 24px;
+      right: 24px;
+      display: flex;
+      gap: 10px;
+      pointer-events: auto;
+    }
+
+    .touch-skill-btn {
+      width: 64px;
+      height: 64px;
+      border-radius: 50%;
+      border: 2px solid rgba(255, 255, 255, 0.35);
+      background: rgba(15, 21, 38, 0.9);
+      color: #fff;
+      font-family: inherit;
+      font-size: 11px;
+      font-weight: 900;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      cursor: pointer;
+      touch-action: manipulation;
+    }
+
+    .touch-skill-btn.slash { border-color: #ff6b88; color: #ff9cb0; }
+    .touch-skill-btn.dash { border-color: #2ee59d; color: #7ff7c7; }
+    .touch-skill-btn.skill { border-color: #ffd166; color: #ffe39f; }
+
+    /* ================= END MODAL ================= */
+    #match-end-modal {
+      position: absolute;
+      inset: 0;
+      z-index: 40;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      background: rgba(5, 8, 16, 0.88);
+      backdrop-filter: blur(5px);
+    }
+
+    #match-end-modal.active {
+      display: flex;
+    }
+
+    .modal-card {
+      background: var(--panel-solid);
+      border: 1px solid var(--panel-border);
+      border-radius: 12px;
+      padding: 22px 26px;
+      text-align: center;
+      max-width: 420px;
+      width: 92%;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .modal-title {
+      font-size: 22px;
+      font-weight: 900;
+      color: var(--gold);
+    }
+
+    .modal-scores {
+      font-size: 15px;
+      font-weight: 800;
+      display: flex;
+      justify-content: space-around;
+    }
+
+    .modal-actions {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+    }
+  .online-bar{display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:10px 12px;border:1px solid #25354e;background:#0c1424;border-radius:8px;margin-top:10px;font-size:11px}
+.online-bar input{font:inherit;background:#050a14;color:#ffd166;border:1px solid #35536b;padding:8px;width:150px;border-radius:4px;user-select:text}
+#onlineStatus{color:#8fabc5;flex:1}#lobby-screen{background:radial-gradient(ellipse at 50% 0,#172742aa,transparent 60%),#070b15f5;padding:20px clamp(12px,3vw,46px)}
+.brand-badge{background:#ff3158}.brand-title{letter-spacing:3px}.char-card{background:linear-gradient(160deg,#17233b,#0b1120);min-height:310px;padding:18px 12px;border-radius:4px}.char-card.selected{border-color:#ffd166;box-shadow:0 0 0 2px #ffd16620,inset 0 0 30px #ffd1660a}.char-preview-canvas{width:104px;height:104px;background:radial-gradient(#23324f,#0a0e1a);border-radius:2px}.char-name{font-size:12px}.ability-pill{padding:7px 6px;line-height:1.4}.team-panel{border-radius:4px}.lobby-footer{border-radius:4px}.enter-btn{min-width:200px;padding:16px 24px;border-radius:3px}.roster-slot{min-height:38px}.roster-list{min-height:225px}.team-top{flex-wrap:wrap}.map-legend-brief{max-width:650px}
+#roomCode,input{touch-action:auto}.hud-btn:disabled{opacity:.45}.player-status-box{pointer-events:none}.char-card:focus{outline:2px solid #ffd166}
+@media(min-width:961px){.lobby-main{grid-template-columns:minmax(180px,1fr) minmax(460px,2.5fr) minmax(180px,1fr)}}
+@media(max-width:960px){#lobby-screen{overflow-y:auto;touch-action:pan-y;justify-content:flex-start;gap:8px}.lobby-main{grid-template-columns:1fr 1fr;margin:0;gap:8px}.char-grid{grid-column:1/-1;grid-row:1;grid-template-columns:repeat(3,1fr)}.char-card{min-height:285px}.team-panel{min-width:0}.lobby-footer{position:sticky;bottom:-1px;z-index:2}.brand-title{font-size:19px}.roster-list{min-height:0}}
+@media(max-width:540px){#lobby-screen{padding:10px}.char-grid{gap:5px}.char-card{padding:8px 5px;min-height:330px;gap:6px}.char-preview-canvas{width:76px;height:76px}.char-name{font-size:11px}.char-desc{font-size:10px}.ability-pill{font-size:9px;padding:5px 3px}.char-role{font-size:9px}.team-panel{padding:8px}.roster-slot{font-size:10px;padding:5px}.team-btn{font-size:11px}.lobby-footer .map-legend-brief{display:none}.enter-btn{flex:1}.top-bar{gap:4px;top:5px;left:5px;right:5px}.score-pill{padding:5px;font-size:10px;gap:6px}.hud-btn{font-size:9px;padding:5px}.event-banner{top:72px;font-size:9px;max-width:95vw}#minimap-canvas{top:102px;width:110px;height:75px}.player-status-box{bottom:150px;min-width:200px;width:210px;padding:6px}.touch-skill-btn{width:58px;height:58px;font-size:10px}#touch-controls{bottom:12px}.online-bar{gap:4px;padding:6px}}
+@media(max-height:500px) and (orientation:landscape){.player-status-box{bottom:8px;min-width:180px;width:200px;padding:4px}.top-bar{top:4px}.event-banner{top:42px}#minimap-canvas{top:70px;width:112px;height:76px}.touch-skill-btn{width:57px;height:57px}#joystick-zone{width:96px;height:96px}.char-card{min-height:260px}.lobby-footer{position:sticky}}
+@media(max-height:500px) and (orientation:landscape){.lobby-footer .map-legend-brief{display:none}.lobby-footer{padding:6px}.lobby-footer .enter-btn{padding:10px 18px}}
+
+</style>
+</head>
+<body>
+  <div id="game-root">
+    <canvas id="gameCanvas"></canvas>
+
+    <!-- LOBBY -->
+    <div id="lobby-screen">
+      <div class="lobby-header">
+        <div class="brand-block">
+          <div class="brand-badge">16-BIT PVPvE</div>
+          <div class="brand-title">SAMURAI <span>ZERO</span> : PIXEL CLASH</div>
+        </div>
+        <div class="player-name-box">
+          <label for="playerNameInput">CODENAME</label>
+          <input maxlength="18" aria-label="Player name" id="playerNameInput" type="text" maxlength="14" value="HUSSEIN_ZERO" />
+        </div>
+      </div>
+
+      <div class="online-bar"><label>ROOM <input id="roomCode" maxlength="10" placeholder="Blank = create"></label><button class="mini-btn" id="joinRoom">JOIN ROOM</button><button class="mini-btn" id="inviteRoom">COPY INVITE</button><span id="onlineStatus" role="status">Connecting…</span></div><div class="lobby-main">
+        <!-- CRIMSON TEAM -->
+        <div class="team-panel crimson" id="crimsonPanel">
+          <div class="team-top">
+            <button class="team-btn crimson" id="selectCrimsonBtn">CRIMSON</button>
+            <div class="bot-controls">
+              <button class="mini-btn" id="addCrimsonBotBtn">+ BOT</button>
+              <button class="mini-btn" id="rmCrimsonBotBtn">- BOT</button>
+            </div>
+          </div>
+          <div class="roster-list" id="crimsonRoster"></div>
+        </div>
+
+        <!-- CHARACTER SELECT -->
+        <div class="char-grid" id="charGrid"></div>
+
+        <!-- AZURE TEAM -->
+        <div class="team-panel azure" id="azurePanel">
+          <div class="team-top">
+            <button class="team-btn azure" id="selectAzureBtn">AZURE</button>
+            <div class="bot-controls">
+              <button class="mini-btn" id="addAzureBotBtn">+ BOT</button>
+              <button class="mini-btn" id="rmAzureBotBtn">- BOT</button>
+            </div>
+          </div>
+          <div class="roster-list" id="azureRoster"></div>
+        </div>
+      </div>
+
+      <div class="lobby-footer">
+        <div class="map-legend-brief">
+          <b>Levels 1–10 &amp; Stronghold Arena:</b> Gain XP from KOs, radars, vaults &amp; Oni Idol to boost HP, ATK &amp; Speed. Open <b>Map Guide</b> for full mechanics.
+        </div>
+        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+          <button class="mini-btn" id="lobbyGuideBtn">MAP GUIDE</button>
+          <button class="mini-btn" id="fill5v5Btn">FILL 5v5</button>
+          <button class="enter-btn" id="enterClashBtn">▶ ENTER CLASH</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- HUD -->
+    <div id="hud-layer">
+      <div class="top-bar">
+        <div class="score-pill">
+          <span class="score-crimson">CRIMSON: <b id="crimsonScoreText">0</b></span>
+          <span>|</span>
+          <span class="score-azure">AZURE: <b id="azureScoreText">0</b></span>
+          <span>|</span>
+          <span class="score-timer" id="matchTimerText">03:00</span>
+        </div>
+        <div class="hud-actions">
+          <button class="hud-btn" id="mapGuideBtn">MAP GUIDE</button>
+          <button class="hud-btn" id="camZoomBtn">ZOOM: WIDE</button>
+          <button class="hud-btn" id="touchToggleBtn">PAD: AUTO</button>
+          <button class="hud-btn" id="lobbyReturnBtn">LOBBY</button>
+        </div>
+      </div>
+
+      <div class="event-banner" id="eventBannerText">NEON CORE ONLINE — CAPTURE ZONES, RADARS &amp; ONI IDOL</div>
+
+      <canvas id="minimap-canvas" width="162" height="110"></canvas>
+
+      <div class="player-status-box">
+        <div class="level-row">
+          <span class="level-badge" id="playerLevelText">LV.1 • SHADOW RONIN</span>
+          <span class="xp-text" id="playerXpText">XP 0 / 100</span>
+        </div>
+        <div class="bar-outer">
+          <div class="hp-bar-inner" id="hpBarFill"></div>
+        </div>
+        <div class="xp-bar-outer">
+          <div class="xp-bar-inner" id="xpBarFill"></div>
+        </div>
+        <div class="status-meta">
+          <span id="playerMetaText">HP 110/110 | ATK 34</span>
+          <span id="buffMetaText">BUFF: NONE</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- MAP & MECHANICS GUIDE MODAL -->
+    <div id="map-guide-modal">
+      <div class="guide-card">
+        <div class="guide-header">
+          <div class="guide-title">STRONGHOLD MAP &amp; MECHANICS GUIDE</div>
+          <button class="hud-btn" id="closeGuideBtn">CLOSE [ESC]</button>
+        </div>
+        <div class="guide-list">
+          <div class="guide-item">
+            <div class="guide-item-title">LEVELS 1–10 &amp; XP</div>
+            <div class="guide-item-desc">Earn XP from KOs, radar captures, vaults, Oni Idol &amp; core presence. Every level boosts Max HP, Slash Damage &amp; Move Speed.</div>
+          </div>
+          <div class="guide-item">
+            <div class="guide-item-title">NEON CORE &amp; GOLDEN ONI</div>
+            <div class="guide-item-desc">Hold the center ring for steady team points. Shatter the Golden Oni Idol for +250 team points plus Speed &amp; Shield buffs.</div>
+          </div>
+          <div class="guide-item">
+            <div class="guide-item-title">RADAR TOWERS &amp; STEALTH</div>
+            <div class="guide-item-desc">Hide inside green bamboo zones to cloak, or capture Radar Towers (+40 pts) to reveal hidden enemies for 15s.</div>
+          </div>
+          <div class="guide-item">
+            <div class="guide-item-title">LASER BRIDGES &amp; MIRRORS</div>
+            <div class="guide-item-desc">Stand on pressure plates to activate laser bridges. Slash south mirrors (90°) to beam lasers into Vaults (+150 pts).</div>
+          </div>
+          <div class="guide-item">
+            <div class="guide-item-title">LEVERS, GATES &amp; GRAVITY</div>
+            <div class="guide-item-desc">Slash levers to open/close Iron Gates and block lanes. Purple gravity fields slow movement unless you Dash through.</div>
+          </div>
+          <div class="guide-item">
+            <div class="guide-item-title">SHRINES, TORII, WINDS &amp; SCROLLS</div>
+            <div class="guide-item-desc">Team shrines restore HP &amp; reduce cooldowns; Torii gates warp across the map; Wind pads launch you; Scrolls grant temporary buffs.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TOUCH CONTROLS -->
+    <div id="touch-controls">
+      <div id="joystick-zone">
+        <div id="joystick-knob"></div>
+      </div>
+      <div class="action-pad">
+        <button class="touch-skill-btn slash" id="touchSlashBtn">SLASH<br/>[J/Click]</button>
+        <button class="touch-skill-btn dash" id="touchDashBtn">DASH<br/>[Space]</button>
+        <button class="touch-skill-btn skill" id="touchSkillBtn">SKILL<br/>[K/E]</button>
+      </div>
+    </div>
+
+    <!-- MATCH END MODAL -->
+    <div id="match-end-modal">
+      <div class="modal-card">
+        <div class="modal-title" id="winnerTitle">VICTORY</div>
+        <div class="modal-scores">
+          <span class="score-crimson" id="finalCrimsonScore">CRIMSON: 0</span>
+          <span class="score-azure" id="finalAzureScore">AZURE: 0</span>
+        </div>
+        <p style="font-size:12px; color:var(--text-muted);" id="matchSummaryText"></p>
+        <div class="modal-actions">
+          <button class="enter-btn" id="rematchBtn">REMATCH</button>
+          <button class="hud-btn" id="backToLobbyBtn" style="padding:12px 16px;">LOBBY</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script><script src="/game.js"></script>
+</body>
+</html>

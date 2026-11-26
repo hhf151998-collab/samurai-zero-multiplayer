@@ -1,15 +1,19 @@
-# Samurai Zero: Pixel Clash
+# Samurai Zero: Pixel Clash — restored Dojo edition
 
-Browser multiplayer arena with Node.js and Socket.IO. Two teams, up to ten human players, bots filling to 5v5, three classes, three-minute rounds, room invitations, keyboard and touch controls.
+Online 5v5 cyber-samurai arena, based on the recovered original game. Animated pixel characters, team rosters, adjustable bots, room invitation links, three-minute matches and server-owned simulation.
 
-Run `npm install`, then `npm start`. Open http://localhost:3000. Create a room by leaving its code blank, copy the invitation, and let the host start the match. J attacks, Space dashes, K uses a skill; WASD/arrows move. The mobile pad and buttons provide the same actions.
+The 2200×1500 dojo includes breakable bamboo, explosive barrels, pressure plates and retracting bridges, laser mirrors and 150-point vaults, stealth zones, wind pads, healing/shield shrines, paired teleporters, temporary power scrolls, radar towers, lever gates, gravity fields and a 250-point Oni event. Three character skills: Blink Slash, Shock Slam and EMP Pulse. Artwork is drawn locally with Canvas; no image-generation or paid API services are used.
 
-The server owns movement, damage, scoring, bot AI and match time. Rooms are in memory and disappear when all human players leave or the service restarts. This is the simplified multiplayer version recovered from the original conversation, not the larger original PvPvE game.
+## Play
 
-## Render
+Choose a character and clan. ENTER CLASH creates a room and starts immediately for solo play. To invite friends first, choose JOIN ROOM with a blank code, COPY INVITE, wait for friends, then ENTER CLASH. The room host controls bots and match starts. Human players replace bots when joining an active match.
 
-Create a Node web service from this repository. Select **Free** explicitly. Build: `npm install --ignore-scripts`. Start: `npm start`. Health check: `/health`. The server uses Render's PORT automatically. Do not add a payment method for a no-charge deployment; check existing billing settings before publishing. Free services can sleep when idle and take time to wake.
+WASD/arrows move; J or click slashes; Space dashes; K/E uses the skill. Touch users have a movement pad and three action buttons. ZOOM cycles WIDE / NORMAL / TACTICAL. MAP GUIDE explains objectives. LOBBY leaves the room.
+
+## Run / deploy
+
+`npm install --ignore-scripts`, then `npm start`. Local default port: 3001; hosted services use PORT. Health endpoint: `/health`. Render: Node, Free compute, build `npm install --ignore-scripts`, start `npm start`. Rooms are memory-only and reset on service restarts. Free hosting can sleep and takes time to wake.
 
 ## Verification
 
-Run `node test.cjs` with the service running. Set TEST_URL to the public origin to repeat against deployment. Tests cover real WebSocket connections, room sharing, host-only start, bot filling, synchronized movement, mid-match joins, disconnect replacement and host migration.
+`node test.cjs` tests interactive mechanics and a complete round. `node online-test.cjs` tests Socket.IO room sharing, expanded world synchronization, movement, dash, bots, late joining and host migration. Set TEST_URL to the public origin to test the deployed service.
